@@ -48,6 +48,7 @@ kube::multinode::main(){
 
   # Paths
   FLANNEL_SUBNET_TMPDIR=$(mktemp -d)
+  KUBENETES_DATA_TMPDIR=$(mktemp -d)
 
   # Trap errors
   kube::log::install_errexit
@@ -340,21 +341,74 @@ kube::multinode::start_k8s_master() {
   kube::multinode::make_shared_kubelet_dir
 
   # TODO: Get rid of --hostname-override
+  # docker run -d \
+  #   --net=host \
+  #   --pid=host \
+  #   --privileged \
+  #   --restart=${RESTART_POLICY} \
+  #   ${KUBELET_MOUNTS} \
+  #   gcr.io/google_containers/hyperkube-${ARCH}:${K8S_VERSION} \
+  #   /hyperkube kubelet \
+  #     --allow-privileged \
+  #     --api-servers=http://localhost:8080 \
+  #     --config=/etc/kubernetes/manifests-multi \
+  #     --cluster-dns=10.0.0.10 \
+  #     --cluster-domain=cluster.local \
+  #     --hostname-override=$(ip -o -4 addr list ${NET_INTERFACE} | awk '{print $4}' | cut -d/ -f1) \
+  #     --v=2
+
   docker run -d \
+    --name="apiserver" \
     --net=host \
-    --pid=host \
-    --privileged \
+    -v ${KUBENETES_DATA_TMPDIR}:/srv/kubernetes \
     --restart=${RESTART_POLICY} \
-    ${KUBELET_MOUNTS} \
     gcr.io/google_containers/hyperkube-${ARCH}:${K8S_VERSION} \
-    /hyperkube kubelet \
-      --allow-privileged \
-      --api-servers=http://localhost:8080 \
-      --config=/etc/kubernetes/manifests-multi \
-      --cluster-dns=10.0.0.10 \
-      --cluster-domain=cluster.local \
-      --hostname-override=$(ip -o -4 addr list ${NET_INTERFACE} | awk '{print $4}' | cut -d/ -f1) \
+    /hyperkube apiserver \
+      --service-cluster-ip-range=10.0.0.1/24 \
+      --insecure-bind-address=0.0.0.0 \
+      --etcd-servers=http://127.0.0.1:4001 \
+      --admission-control=NamespaceLifecycle,LimitRanger,ServiceAccount,ResourceQuota \
+      --client-ca-file=/srv/kubernetes/ca.crt \
+      --basic-auth-file=/srv/kubernetes/basic_auth.csv \
+      --min-request-timeout=300 \
+      --tls-cert-file=/srv/kubernetes/server.cert \
+      --tls-private-key-file=/srv/kubernetes/server.key \
+      --token-auth-file=/srv/kubernetes/known_tokens.csv \
+      --allow-privileged=true \
       --v=2
+
+  docker run -d \
+    --name="controller-manager" \
+    --net=host \
+    -v ${KUBENETES_DATA_TMPDIR}:/srv/kubernetes \
+    --restart=${RESTART_POLICY} \
+    gcr.io/google_containers/hyperkube-${ARCH}:${K8S_VERSION} \
+    /hyperkube controller-manager \
+      --master=127.0.0.1:8080 \
+      --service-account-private-key-file=/srv/kubernetes/server.key \
+      --root-ca-file=/srv/kubernetes/ca.crt \
+      --min-resync-period=3m \
+      --v=2
+
+  docker run -d \
+    --name="scheduler" \
+    --net=host \
+    -v ${KUBENETES_DATA_TMPDIR}:/srv/kubernetes \
+    --restart=${RESTART_POLICY} \
+    gcr.io/google_containers/hyperkube-${ARCH}:${K8S_VERSION} \
+    /hyperkube scheduler \
+      --master=127.0.0.1:8080 \
+      --v=2
+
+  docker run -d \
+    --name="setup" \
+    --net=host \
+    -v ${KUBENETES_DATA_TMPDIR}:/data \
+    --restart=${RESTART_POLICY} \
+    gcr.io/google_containers/hyperkube-${ARCH}:${K8S_VERSION} \
+    /setup-files.sh \
+      IP:10.0.0.1,DNS:kubernetes,DNS:kubernetes.default,DNS:kubernetes.default.svc,DNS:kubernetes.default.svc.cluster.local
+
 }
 
 # Start kubelet in a container, for a worker node
