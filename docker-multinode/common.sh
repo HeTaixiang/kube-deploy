@@ -182,12 +182,13 @@ kube::multinode::start_etcd() {
   done
 
   # Set flannel net config
-  docker -H ${BOOTSTRAP_DOCKER_SOCK} run \
-      --net=host \
-      gcr.io/google_containers/etcd-${ARCH}:${ETCD_VERSION} \
-      etcdctl \
-      set /coreos.com/network/config \
-          "{ \"Network\": \"${FLANNEL_NETWORK}\", \"Backend\": {\"Type\": \"${FLANNEL_BACKEND}\"}}"
+  curl http://localhost:4001/v2/keys/coreos.com/network/config -XPUT -d value="{ \"Network\": \"${FLANNEL_NETWORK}\", \"Backend\": {\"Type\": \"${FLANNEL_BACKEND}\"}}"
+  # docker -H ${BOOTSTRAP_DOCKER_SOCK} run \
+  #     --net=host \
+  #     gcr.io/google_containers/etcd-${ARCH}:${ETCD_VERSION} \
+  #     etcdctl \
+  #     set /coreos.com/network/config \
+  #         "{ \"Network\": \"${FLANNEL_NETWORK}\", \"Backend\": {\"Type\": \"${FLANNEL_BACKEND}\"}}"
 
   sleep 2
 }
