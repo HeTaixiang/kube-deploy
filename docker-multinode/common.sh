@@ -358,6 +358,7 @@ kube::multinode::start_k8s_master() {
   #     --hostname-override=$(ip -o -4 addr list ${NET_INTERFACE} | awk '{print $4}' | cut -d/ -f1) \
   #     --v=2
 
+  kube::log::status "Launching Kubernetes apiserver..."
   docker run -d \
     --name="apiserver" \
     --net=host \
@@ -378,6 +379,7 @@ kube::multinode::start_k8s_master() {
       --allow-privileged=true \
       --v=2
 
+  kube::log::status "Launching Kubernetes controller-manager..."
   docker run -d \
     --name="controller-manager" \
     --net=host \
@@ -391,6 +393,7 @@ kube::multinode::start_k8s_master() {
       --min-resync-period=3m \
       --v=2
 
+  kube::log::status "Launching Kubernetes scheduler..."
   docker run -d \
     --name="scheduler" \
     --net=host \
@@ -401,6 +404,7 @@ kube::multinode::start_k8s_master() {
       --master=127.0.0.1:8080 \
       --v=2
 
+  kube::log::status "Launching Kubernetes setup(create server,client cert and authen )..."
   docker run -d \
     --name="setup" \
     --net=host \
